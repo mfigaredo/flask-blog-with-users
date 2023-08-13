@@ -1,5 +1,5 @@
 from datetime import date
-from flask import Flask, abort, render_template, redirect, url_for, flash
+from flask import Flask, abort, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 # Import your forms from the forms.py
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+import os, smtplib
 
 '''
 Make sure the required packages are installed: 
@@ -24,8 +25,14 @@ pip3 install -r requirements.txt
 This will install the packages from the requirements.txt for this project.
 '''
 
+DEBUG = False
+
+if DEBUG:
+    from dotenv import load_dotenv
+    load_dotenv()
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "f74047d0aa05c404a2dfc6aad8fa35186f4a2725672e274549fcc18955f3f85e"
+app.config['SECRET_KEY'] = os.environ.get("FLASK_KEY", 'a-secret-key')
 ckeditor = CKEditor(app)
 Bootstrap5(app)
 
@@ -48,7 +55,7 @@ def load_user(user_id):
     return db.get_or_404(User, user_id)
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", 'sqlite:///posts.db')
 db = SQLAlchemy()
 db.init_app(app)
 
@@ -244,11 +251,39 @@ def about():
 def contact():
     return render_template("contact.html")
 
+@app.route("/contact", methods=["POST"])
+def receive_data():
+    name = request.form.get("name")
+    email = request.form.get("email")
+    phone = request.form.get("phone")
+    message = request.form.get("message")
+    # return f"<h1>Successfully sent your message</h1>"
+    send_mail(subject="New Message!", body=f"Name: {name}\nEmail: {email}\nPhone: {phone}\nMessage: {message}")
+    data = {
+        "message": "Successfully sent your message",
+        "msg_sent": True,
+    }
+    return render_template("contact.html", **data)
 
-@app.route("/test")
-def test():
-    # return "<h2>hola mundo</h2>"
-    return render_template("test.html")
+def send_mail(*args, **kwargs):
+    sender = "Blog Admin <blogadmin@mikesblog.com>"
+    receiver = sender
+    message = f"""\
+Subject: {kwargs.get('subject')}
+To: {receiver}
+From: {sender}
+
+{kwargs.get('body')}
+"""
+    with smtplib.SMTP(host=os.getenv('EMAIL_HOST'), port=os.getenv('EMAIL_PORT')) as server:
+        server.login(os.getenv('EMAIL_USER'), os.getenv('EMAIL_PASSWORD'))
+        # server.starttls()
+        server.sendmail(sender, receiver, message)
+
+# @app.route("/test")
+# def test():
+#     # return "<h2>hola mundo</h2>"
+#     return render_template("test.html")
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=DEBUG)
